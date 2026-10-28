@@ -229,8 +229,8 @@ local StoredInfo = {
 };
 
 --// Bind System Storage
-BindStorage = {}
-VisualButtonsContainer = nil
+local BindStorage = {}
+local VisualButtonsContainer = nil
 
 -- Create visual buttons container
 local function createVisualButtonsContainer()
@@ -999,7 +999,7 @@ function Library:CreateWindow(Settings)
 			local pressColor = (Setup.ThemeMode == "Light") and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
 			Tween(IconFrame, .1, { ImageColor3 = pressColor })
 			
-			Settings.Callback()
+			pcall(Settings.Callback)
 			
 			wait(0.1)
 			Tween(IconFrame, .2, { ImageColor3 = Theme.Icon })
@@ -1023,9 +1023,9 @@ function Library:CreateWindow(Settings)
 		Connect(Input.MouseButton1Click, function() 
 			TextBox:CaptureFocus()
 		end)
-
+        -- фикс дура 2
 		Connect(TextBox.FocusLost, function() 
-			Settings.Callback(TextBox.Text)
+			pcall(Settings.Callback, TextBox.Text)
 		end)
 
 		Animations:Component(Input)
@@ -1134,12 +1134,12 @@ function Library:CreateWindow(Settings)
 		settingsIcon.MouseButton1Click:Connect(function()
 			bindWindow.Visible = not bindWindow.Visible
 		end)
-		
+		-- фикс ебаная хуйня 3
 		Connect(Toggle.MouseButton1Click, function()
 			local Value = not On.Value
 
 			Set(Value)
-			Settings.Callback(Value)
+			pcall(Settings.Callback, Value)
 		end)
 
 		Animations:Component(Toggle);
@@ -1167,8 +1167,9 @@ function Library:CreateWindow(Settings)
 		}
 		
 		-- Автоматическая регистрация в глобальном реестре конфигов
+        -- фикс заебал 4
 		local registry = getgenv().ConfigRegistry or _G.ConfigRegistry
-		if registry and Settings.Title then
+		if type(registry) == "table" and Settings.Title then
 			local elementId = Settings.Title:gsub(" ", "_"):lower() -- Преобразуем "Auto Kill All" в "auto_kill_all"
 			registry[elementId] = {
 				element = methods,
@@ -1213,6 +1214,12 @@ function Library:CreateWindow(Settings)
 						SetProperty(Bind, {
 							Text = tostring(Key.KeyCode):gsub(Types.Key, "")
 						})
+					end
+					
+					-- фикс хуйни 1
+					if Detect then
+						Detect:Disconnect()
+						Detect = nil
 					end
 				end 
 			end)
@@ -1388,8 +1395,9 @@ function Library:CreateWindow(Settings)
 		}
 		
 		-- Автоматическая регистрация в глобальном реестре конфигов
+        -- фикс заебал 5
 		local registry = getgenv().ConfigRegistry or _G.ConfigRegistry
-		if registry and Settings.Title then
+		if type(registry) == "table" and Settings.Title then
 			local elementId = Settings.Title:gsub(" ", "_"):lower()
 			registry[elementId] = {
 				element = methods,
@@ -1889,8 +1897,9 @@ function Library:CreateWindow(Settings)
 		}
 		
 		-- Автоматическая регистрация в глобальном реестре конфигов
+        -- фикс заебал 6
 		local registry = getgenv().ConfigRegistry or _G.ConfigRegistry
-		if registry and Settings.Title then
+		if type(registry) == "table" and Settings.Title then
 			local elementId = Settings.Title:gsub(" ", "_"):lower()
 			registry[elementId] = {
 				element = methods,
@@ -2324,244 +2333,7 @@ function Library:CreateWindow(Settings)
 			end
 		end
 	end
-
-	function Options:AddMultiSelect(Settings)
-		local Container = Instance.new("Frame")
-		Container.Name = Settings.Title
-		Container.Size = UDim2.new(1, -20, 0, 45)
-		Container.BackgroundTransparency = 1
-		Container.Parent = Settings.Tab
-		Container.Visible = true
-		
-		local ToggleElement = Clone(Components["Toggle"])
-		local Title, Description = Options:GetLabels(ToggleElement)
-		local Main = ToggleElement["Main"]
-		local Circle = Main["Circle"]
-		local Enabled = Settings.Enabled or false
-		
-		ToggleElement.Parent = Container
-		ToggleElement.Size = UDim2.new(1, 0, 0, 45)
-		ToggleElement.Position = UDim2.new(0, 0, 0, 0)
-		ToggleElement.Visible = true
-		
-		local DropdownFrame = Instance.new("Frame")
-		DropdownFrame.Size = UDim2.new(0, 100, 0, 28)
-		DropdownFrame.Position = UDim2.new(1, -160, 0.5, -14)
-		DropdownFrame.BackgroundColor3 = Theme.Interactables
-		DropdownFrame.BorderSizePixel = 0
-		DropdownFrame.ZIndex = 3
-		DropdownFrame.Parent = ToggleElement
-		
-		local DropCorner = Instance.new("UICorner")
-		DropCorner.CornerRadius = UDim.new(0, 6)
-		DropCorner.Parent = DropdownFrame
-		
-		local DropButton = Instance.new("TextButton")
-		DropButton.Size = UDim2.new(1, 0, 1, 0)
-		DropButton.BackgroundTransparency = 1
-		DropButton.Text = ""
-		DropButton.ZIndex = 4
-		DropButton.Parent = DropdownFrame
-		
-		local DropText = Instance.new("TextLabel")
-		DropText.Name = "DropText"
-		DropText.Size = UDim2.new(1, -10, 1, 0)
-		DropText.Position = UDim2.new(0, 5, 0, 0)
-		DropText.BackgroundTransparency = 1
-		DropText.Text = tostring(Settings.Default or "Select")
-		DropText.TextColor3 = Theme.Title
-		DropText.TextSize = 11
-		DropText.Font = Enum.Font.Gotham
-		DropText.TextXAlignment = Enum.TextXAlignment.Left
-		DropText.TextTruncate = Enum.TextTruncate.AtEnd
-		DropText.ZIndex = 5
-		DropText.Parent = DropdownFrame
-		
-		local isExpanded = false
-		local currentSelection = Settings.Default
-		local DropdownList = nil
-		local isAnimating = false
-		
-		local function createDropdownList()
-			if DropdownList then return end
-			
-			DropdownList = Instance.new("ScrollingFrame")
-			DropdownList.Name = "DropdownList"
-			DropdownList.Size = UDim2.new(1, 0, 0, 0)
-			DropdownList.Position = UDim2.new(0, 0, 0, 45)
-			DropdownList.BackgroundColor3 = Theme.Secondary
-			DropdownList.BorderSizePixel = 0
-			DropdownList.ScrollBarThickness = 4
-			DropdownList.ScrollBarImageColor3 = Color3.fromRGB(25, 25, 25)
-			DropdownList.CanvasSize = UDim2.new(0, 0, 0, 0)
-			DropdownList.Visible = false
-			DropdownList.ZIndex = 10
-			DropdownList.Parent = Container
-			
-			local ListCorner = Instance.new("UICorner")
-			ListCorner.CornerRadius = UDim.new(0, 6)
-			ListCorner.Parent = DropdownList
-			
-			local ListStroke = Instance.new("UIStroke")
-			ListStroke.Color = Theme.Outline
-			ListStroke.Thickness = 1
-			ListStroke.Parent = DropdownList
-			
-			local ListLayout = Instance.new("UIListLayout")
-			ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-			ListLayout.Padding = UDim.new(0, 2)
-			ListLayout.Parent = DropdownList
-			
-			local ListPadding = Instance.new("UIPadding")
-			ListPadding.PaddingTop = UDim.new(0, 4)
-			ListPadding.PaddingBottom = UDim.new(0, 4)
-			ListPadding.PaddingLeft = UDim.new(0, 4)
-			ListPadding.PaddingRight = UDim.new(0, 4)
-			ListPadding.Parent = DropdownList
-			
-			for _, Option in ipairs(Settings.Options) do
-				local OptionButton = Instance.new("TextButton")
-				OptionButton.Size = UDim2.new(1, -8, 0, 28)
-				OptionButton.BackgroundColor3 = Theme.Component
-				OptionButton.BorderSizePixel = 0
-				OptionButton.Text = ""
-				OptionButton.AutoButtonColor = false
-				OptionButton.ZIndex = 11
-				OptionButton.Parent = DropdownList
-				
-				local OptCorner = Instance.new("UICorner")
-				OptCorner.CornerRadius = UDim.new(0, 6)
-				OptCorner.Parent = OptionButton
-				
-				local OptLabel = Instance.new("TextLabel")
-				OptLabel.Size = UDim2.new(1, -10, 1, 0)
-				OptLabel.Position = UDim2.new(0, 8, 0, 0)
-				OptLabel.BackgroundTransparency = 1
-				OptLabel.Text = Option
-				OptLabel.TextColor3 = Theme.Title
-				OptLabel.TextSize = 13
-				OptLabel.Font = Enum.Font.Gotham
-				OptLabel.TextXAlignment = Enum.TextXAlignment.Left
-				OptLabel.ZIndex = 12
-				OptLabel.Parent = OptionButton
-				
-				if Option == currentSelection then
-					OptionButton.BackgroundColor3 = Color(Theme.Component, 5, Setup.ThemeMode)
-				end
-				
-				Animations:Component(OptionButton)
-				
-				Connect(OptionButton.MouseButton1Click, function()
-					currentSelection = Option
-					DropText.Text = Option
-					
-					for _, btn in pairs(DropdownList:GetChildren()) do
-						if btn:IsA("TextButton") then
-							Tween(btn, .2, { BackgroundColor3 = Theme.Component })
-						end
-					end
-					
-					Tween(OptionButton, .2, { BackgroundColor3 = Color(Theme.Component, 5, Setup.ThemeMode) })
-					
-					if Settings.DropdownCallback then
-						Settings.DropdownCallback(Option)
-					end
-					
-					if not isAnimating then
-						isAnimating = true
-						isExpanded = false
-						Tween(DropdownList, .2, { Size = UDim2.new(1, 0, 0, 0) })
-						Tween(Container, .2, { Size = UDim2.new(1, -20, 0, 45) })
-						wait(.2)
-						DropdownList.Visible = false
-						isAnimating = false
-					end
-				end)
-			end
-			
-			ListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-				DropdownList.CanvasSize = UDim2.new(0, 0, 0, ListLayout.AbsoluteContentSize.Y + 8)
-			end)
-		end
-		
-		local function toggleDropdown()
-			if isAnimating then return end
-			
-			createDropdownList()
-			
-			if not isExpanded then
-				isAnimating = true
-				DropdownList.Visible = true
-				isExpanded = true
-				local contentHeight = math.min(120, DropdownList.CanvasSize.Y.Offset)
-				Tween(DropdownList, .2, { Size = UDim2.new(1, 0, 0, contentHeight) })
-				Tween(Container, .2, { Size = UDim2.new(1, -20, 0, 45 + contentHeight) })
-				wait(.2)
-				isAnimating = false
-			else
-				isAnimating = true
-				isExpanded = false
-				Tween(DropdownList, .2, { Size = UDim2.new(1, 0, 0, 0) })
-				Tween(Container, .2, { Size = UDim2.new(1, -20, 0, 45) })
-				wait(.2)
-				if DropdownList then
-					DropdownList.Visible = false
-				end
-				isAnimating = false
-			end
-		end
-		
-		Connect(DropButton.MouseButton1Click, toggleDropdown)
-		
-		local Set = function(Value)
-			Enabled = Value
-			
-			if Value then
-				if Setup.ThemeMode == "Light" then
-					Tween(Main, .2, { BackgroundColor3 = Color3.fromRGB(0, 0, 0) })
-					Tween(Circle, .2, { BackgroundColor3 = Color3.fromRGB(255, 255, 255), Position = UDim2.new(1, -16, 0.5, 0) })
-				else
-					Tween(Main, .2, { BackgroundColor3 = Color3.fromRGB(255, 255, 255) })
-					Tween(Circle, .2, { BackgroundColor3 = Color3.fromRGB(0, 0, 0), Position = UDim2.new(1, -16, 0.5, 0) })
-				end
-			else
-				Tween(Main, .2, { BackgroundColor3 = Theme.Interactables })
-				local circleColor = (Setup.ThemeMode == "Light") and Color3.fromRGB(0, 0, 0) or Theme.Primary
-				Tween(Circle, .2, { BackgroundColor3 = circleColor, Position = UDim2.new(0, 3, 0.5, 0) })
-				
-				if isExpanded and DropdownList and not isAnimating then
-					isAnimating = true
-					isExpanded = false
-					Tween(DropdownList, .2, { Size = UDim2.new(1, 0, 0, 0) })
-					Tween(Container, .2, { Size = UDim2.new(1, -20, 0, 45) })
-					wait(.2)
-					if DropdownList then
-						DropdownList.Visible = false
-					end
-					isAnimating = false
-				end
-			end
-		end
-		
-		Connect(ToggleElement.MouseButton1Click, function()
-			Enabled = not Enabled
-			Set(Enabled)
-			
-			if Settings.ToggleCallback then
-				Settings.ToggleCallback(Enabled)
-			end
-		end)
-		
-		Animations:Component(ToggleElement)
-		Animations:Component(DropButton)
-		
-		SetProperty(Title, { Text = Settings.Title })
-		SetProperty(Description, { Text = Settings.Description })
-		
-		createDropdownList()
-		
-		Set(Enabled)
-	end
+    -- фикс ебаной дуры 9
 
 	function Options:AddMultiSelect(Settings)
 		local Container = Instance.new("Frame")
@@ -2958,8 +2730,9 @@ function Library:CreateWindow(Settings)
 		}
 		
 		-- Автоматическая регистрация в глобальном реестре конфигов
+        -- фикс заебал 7
 		local registry = getgenv().ConfigRegistry or _G.ConfigRegistry
-		if registry and Settings.Title then
+		if type(registry) == "table" and Settings.Title then
 			local elementId = Settings.Title:gsub(" ", "_"):lower()
 			registry[elementId] = {
 				element = methods,
@@ -3358,8 +3131,9 @@ function Library:CreateWindow(Settings)
 		}
 		
 		-- Автоматическая регистрация в глобальном реестре конфигов
+        -- че за шлюха кодила фикс 8
 		local registry = getgenv().ConfigRegistry or _G.ConfigRegistry
-		if registry and Settings.Title then
+		if type(registry) == "table" and Settings.Title then
 			local elementId = Settings.Title:gsub(" ", "_"):lower()
 			-- Для ColorPicker сохраняем как таблицу {R, G, B}
 			registry[elementId] = {
