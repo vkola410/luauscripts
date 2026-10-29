@@ -1910,6 +1910,383 @@ function Library:CreateWindow(Settings)
 		return methods
 	end
 
+	function Options:AddToggleMultiSelect(Settings)
+		local Container = Instance.new("Frame")
+		Container.Name = Settings.Title
+		Container.Size = UDim2.new(1, -20, 0, 45)
+		Container.BackgroundTransparency = 1
+		Container.Parent = Settings.Tab
+		Container.Visible = true
+		
+		local ToggleElement = Clone(Components["Toggle"])
+		local Title, Description = Options:GetLabels(ToggleElement)
+		local Main = ToggleElement["Main"]
+		local Circle = Main["Circle"]
+		local Enabled = Settings.Enabled or false
+		
+		ToggleElement.Parent = Container
+		ToggleElement.Size = UDim2.new(1, 0, 0, 45)
+		ToggleElement.Position = UDim2.new(0, 0, 0, 0)
+		ToggleElement.Visible = true
+		
+		local DropdownFrame = Instance.new("Frame")
+		DropdownFrame.Size = UDim2.new(0, 100, 0, 28)
+		DropdownFrame.Position = UDim2.new(1, -160, 0.5, -14)
+		DropdownFrame.BackgroundColor3 = Theme.Interactables
+		DropdownFrame.BorderSizePixel = 0
+		DropdownFrame.ZIndex = 3
+		DropdownFrame.Parent = ToggleElement
+		
+		local DropCorner = Instance.new("UICorner")
+		DropCorner.CornerRadius = UDim.new(0, 6)
+		DropCorner.Parent = DropdownFrame
+		
+		local DropButton = Instance.new("TextButton")
+		DropButton.Size = UDim2.new(1, 0, 1, 0)
+		DropButton.BackgroundTransparency = 1
+		DropButton.Text = ""
+		DropButton.ZIndex = 4
+		DropButton.Parent = DropdownFrame
+		
+		local DropText = Instance.new("TextLabel")
+		DropText.Name = "DropText"
+		DropText.Size = UDim2.new(1, -10, 1, 0)
+		DropText.Position = UDim2.new(0, 5, 0, 0)
+		DropText.BackgroundTransparency = 1
+		DropText.Text = "None"
+		DropText.TextColor3 = Theme.Title
+		DropText.TextSize = 11
+		DropText.Font = Enum.Font.Gotham
+		DropText.TextXAlignment = Enum.TextXAlignment.Left
+		DropText.TextTruncate = Enum.TextTruncate.AtEnd
+		DropText.ZIndex = 5
+		DropText.Parent = DropdownFrame
+		
+		local settingsIcon = Instance.new("TextButton")
+		settingsIcon.Name = "SettingsIcon"
+		settingsIcon.Size = UDim2.new(0, 12, 0, 12)
+		settingsIcon.Position = UDim2.new(1, -14, 1, -14)
+		settingsIcon.AnchorPoint = Vector2.new(0, 0)
+		settingsIcon.BackgroundColor3 = Theme.Component
+		settingsIcon.BorderSizePixel = 0
+		settingsIcon.Text = "⚙"
+		settingsIcon.TextColor3 = Theme.Description
+		settingsIcon.TextSize = 9
+		settingsIcon.Font = Enum.Font.GothamBold
+		settingsIcon.ZIndex = 10
+		settingsIcon.Parent = ToggleElement
+		
+		local iconCorner = Instance.new("UICorner")
+		iconCorner.CornerRadius = UDim.new(0, 3)
+		iconCorner.Parent = settingsIcon
+		
+		local Set = function(Value)
+			Enabled = Value
+			if Value then
+				if Setup.ThemeMode == "Light" then
+					Tween(Main, .2, { BackgroundColor3 = Color3.fromRGB(0, 0, 0) });
+					Tween(Circle, .2, { BackgroundColor3 = Color3.fromRGB(255, 255, 255), Position = UDim2.new(1, -16, 0.5, 0) });
+				else
+					Tween(Main, .2, { BackgroundColor3 = Color3.fromRGB(255, 255, 255) });
+					Tween(Circle, .2, { BackgroundColor3 = Color3.fromRGB(0, 0, 0), Position = UDim2.new(1, -16, 0.5, 0) });
+				end
+			else
+				Tween(Main, .2, { BackgroundColor3 = Theme.Interactables });
+				local circleColor = (Setup.ThemeMode == "Light") and Color3.fromRGB(0, 0, 0) or Theme.Primary
+				Tween(Circle, .2, { BackgroundColor3 = circleColor, Position = UDim2.new(0, 3, 0.5, 0) });
+			end
+		end
+		
+		local currentBind = nil
+		local visualButton = nil
+		local bindWindow, actionButton, bindButton = createBindSettingsWindow(
+			Settings.Title,
+			function(keyName)
+				currentBind = keyName
+				if keyName then
+					local bindCallback = function()
+						local newValue = not Enabled
+						Set(newValue)
+						if Settings.ToggleCallback then
+							pcall(Settings.ToggleCallback, newValue)
+						end
+					end
+					BindStorage[Settings.Title] = {
+						key = keyName,
+						callback = bindCallback
+					}
+				else
+					BindStorage[Settings.Title] = nil
+				end
+			end,
+			function()
+				if visualButton then
+					visualButton:Destroy()
+					visualButton = nil
+					return "Create Button"
+				else
+					visualButton = createVisualButton(Settings.Title, function()
+						local newValue = not Enabled
+						Set(newValue)
+						if Settings.ToggleCallback then
+							pcall(Settings.ToggleCallback, newValue)
+						end
+					end)
+					return "Delete Button"
+				end
+			end,
+			"None",
+			settingsIcon
+		)
+		
+		settingsIcon.MouseButton1Click:Connect(function()
+			bindWindow.Visible = not bindWindow.Visible
+		end)
+		
+		local isExpanded = false
+		local SelectedItems = {}
+		local DropdownList = nil
+		local isAnimating = false
+		
+		local function createDropdownList()
+			if DropdownList then return end
+			DropdownList = Instance.new("ScrollingFrame")
+			DropdownList.Name = "DropdownList"
+			DropdownList.Size = UDim2.new(1, 0, 0, 0)
+			DropdownList.Position = UDim2.new(0, 0, 0, 45)
+			DropdownList.BackgroundColor3 = Theme.Secondary
+			DropdownList.BorderSizePixel = 0
+			DropdownList.ScrollBarThickness = 4
+			DropdownList.ScrollBarImageColor3 = Color3.fromRGB(25, 25, 25)
+			DropdownList.CanvasSize = UDim2.new(0, 0, 0, 0)
+			DropdownList.Visible = false
+			DropdownList.ZIndex = 10
+			DropdownList.Parent = Container
+			
+			local ListCorner = Instance.new("UICorner")
+			ListCorner.CornerRadius = UDim.new(0, 6)
+			ListCorner.Parent = DropdownList
+			
+			local ListStroke = Instance.new("UIStroke")
+			ListStroke.Color = Theme.Outline
+			ListStroke.Thickness = 1
+			ListStroke.Parent = DropdownList
+			
+			local ListLayout = Instance.new("UIListLayout")
+			ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+			ListLayout.Padding = UDim.new(0, 2)
+			ListLayout.Parent = DropdownList
+			
+			local ListPadding = Instance.new("UIPadding")
+			ListPadding.PaddingTop = UDim.new(0, 4)
+			ListPadding.PaddingBottom = UDim.new(0, 4)
+			ListPadding.PaddingLeft = UDim.new(0, 4)
+			ListPadding.PaddingRight = UDim.new(0, 4)
+			ListPadding.Parent = DropdownList
+			
+			for _, Option in ipairs(Settings.Options) do
+				local OptionButton = Instance.new("TextButton")
+				OptionButton.Name = Option
+				OptionButton.Size = UDim2.new(1, -8, 0, 28)
+				OptionButton.BackgroundColor3 = Theme.Component
+				OptionButton.BorderSizePixel = 0
+				OptionButton.Text = ""
+				OptionButton.AutoButtonColor = false
+				OptionButton.ZIndex = 11
+				OptionButton.Parent = DropdownList
+				
+				local OptCorner = Instance.new("UICorner")
+				OptCorner.CornerRadius = UDim.new(0, 6)
+				OptCorner.Parent = OptionButton
+				
+				local OptLabel = Instance.new("TextLabel")
+				OptLabel.Size = UDim2.new(1, -35, 1, 0)
+				OptLabel.Position = UDim2.new(0, 8, 0, 0)
+				OptLabel.BackgroundTransparency = 1
+				OptLabel.Text = Option
+				OptLabel.TextColor3 = Theme.Title
+				OptLabel.TextSize = 13
+				OptLabel.Font = Enum.Font.Gotham
+				OptLabel.TextXAlignment = Enum.TextXAlignment.Left
+				OptLabel.ZIndex = 12
+				OptLabel.Parent = OptionButton
+				
+				local Checkmark = Instance.new("TextLabel")
+				Checkmark.Name = "Checkmark"
+				Checkmark.Size = UDim2.new(0, 16, 0, 16)
+				Checkmark.Position = UDim2.new(1, -22, 0.5, -8)
+				Checkmark.BackgroundColor3 = Theme.Interactables
+				Checkmark.BorderSizePixel = 0
+				Checkmark.Text = ""
+				Checkmark.TextColor3 = Color3.fromRGB(255, 255, 255)
+				Checkmark.TextSize = 11
+				Checkmark.Font = Enum.Font.GothamBold
+				Checkmark.ZIndex = 12
+				Checkmark.Parent = OptionButton
+				
+				local CheckCorner = Instance.new("UICorner")
+				CheckCorner.CornerRadius = UDim.new(0, 3)
+				CheckCorner.Parent = Checkmark
+				
+				Animations:Component(OptionButton)
+				
+				Connect(OptionButton.MouseButton1Click, function()
+					if SelectedItems[Option] then
+						SelectedItems[Option] = nil
+						Checkmark.Text = ""
+						Checkmark.BackgroundColor3 = Theme.Interactables
+						Tween(OptionButton, .2, { BackgroundColor3 = Theme.Component })
+					else
+						SelectedItems[Option] = true
+						Checkmark.Text = "✓"
+						Checkmark.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+						Tween(OptionButton, .2, { BackgroundColor3 = Color(Theme.Component, 5, Setup.ThemeMode) })
+					end
+					
+					local DisplayText = ""
+					local Count = 0
+					local selectedList = {}
+					for Key, _ in pairs(SelectedItems) do
+						Count = Count + 1
+						table.insert(selectedList, Key)
+					end
+					
+					if Count == 1 then
+						DisplayText = selectedList[1]
+					elseif Count == 2 then
+						DisplayText = selectedList[1] .. ", " .. selectedList[2]
+					elseif Count > 2 then
+						DisplayText = selectedList[1] .. " +" .. (Count - 1)
+					end
+					
+					DropText.Text = (Count > 0 and DisplayText) or "None"
+					
+					if Settings.DropdownCallback then
+						pcall(Settings.DropdownCallback, SelectedItems)
+					end
+				end)
+			end
+			
+			ListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+				DropdownList.CanvasSize = UDim2.new(0, 0, 0, ListLayout.AbsoluteContentSize.Y + 8)
+			end)
+		end
+		
+		local function toggleDropdown()
+			if isAnimating then return end
+			createDropdownList()
+			
+			if not isExpanded then
+				isAnimating = true
+				DropdownList.Visible = true
+				isExpanded = true
+				local contentHeight = math.min(120, DropdownList.CanvasSize.Y.Offset)
+				Tween(DropdownList, .2, { Size = UDim2.new(1, 0, 0, contentHeight) })
+				Tween(Container, .2, { Size = UDim2.new(1, -20, 0, 45 + contentHeight) })
+				wait(.2)
+				isAnimating = false
+			else
+				isAnimating = true
+				isExpanded = false
+				Tween(DropdownList, .2, { Size = UDim2.new(1, 0, 0, 0) })
+				Tween(Container, .2, { Size = UDim2.new(1, -20, 0, 45) })
+				wait(.2)
+				if DropdownList then
+					DropdownList.Visible = false
+				end
+				isAnimating = false
+			end
+		end
+		
+		Connect(DropButton.MouseButton1Click, toggleDropdown)
+		
+		Connect(ToggleElement.MouseButton1Click, function()
+			Enabled = not Enabled
+			Set(Enabled)
+			if Settings.ToggleCallback then
+				pcall(Settings.ToggleCallback, Enabled)
+			end
+		end)
+		
+		Animations:Component(ToggleElement)
+		Animations:Component(DropButton)
+		
+		SetProperty(Title, { Text = Settings.Title })
+		SetProperty(Description, { Text = Settings.Description })
+		
+		createDropdownList()
+		Set(Enabled)
+		
+		local methods = {
+			SetValue = function(value)
+				if type(value) == "table" then
+					if value.enabled ~= nil then
+						Set(value.enabled)
+						if Settings.ToggleCallback then
+							pcall(Settings.ToggleCallback, value.enabled)
+						end
+					end
+					if value.selectedItems and type(value.selectedItems) == "table" then
+						SelectedItems = {}
+						for opt, sel in pairs(value.selectedItems) do
+							if sel then
+								SelectedItems[opt] = true
+							end
+						end
+						
+						local cnt, lst = 0, {}
+						for k, _ in pairs(SelectedItems) do
+							cnt = cnt + 1
+							table.insert(lst, k)
+						end
+						DropText.Text = (cnt == 1 and lst[1]) or (cnt == 2 and lst[1] .. ", " .. lst[2]) or (cnt > 2 and lst[1] .. " +" .. (cnt - 1)) or "None"
+						
+						if DropdownList then
+							for _, optButton in pairs(DropdownList:GetChildren()) do
+								if optButton:IsA("TextButton") then
+									local checkmark = nil
+									for _, child in pairs(optButton:GetChildren()) do
+										if child:IsA("TextLabel") and child.Name == "Checkmark" then
+											checkmark = child
+											break
+										end
+									end
+									if checkmark then
+										if SelectedItems[optButton.Name] then
+											checkmark.Text = "✓"
+											optButton.BackgroundColor3 = Color(Theme.Component, 5, Setup.ThemeMode)
+										else
+											checkmark.Text = ""
+											optButton.BackgroundColor3 = Theme.Component
+										end
+									end
+								end
+							end
+						end
+						
+						if Settings.DropdownCallback then
+							pcall(Settings.DropdownCallback, lst)
+						end
+					end
+				end
+			end,
+			GetValue = function()
+				return {enabled = Enabled, selectedItems = SelectedItems}
+			end
+		}
+		
+		local registry = getgenv().ConfigRegistry or _G.ConfigRegistry
+		if type(registry) == "table" and Settings.Title then
+			local elementId = Settings.Title:gsub(" ", "_"):lower()
+			registry[elementId] = {
+				element = methods,
+				type = "togglemultiselect"
+			}
+		end
+		
+		return methods
+	end
+
 	function Options:AddMultiSelect(Settings)
 		local Container = Instance.new("Frame")
 		Container.Name = Settings.Title
